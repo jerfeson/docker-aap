@@ -1,10 +1,14 @@
-FROM amazonlinux:2018.03
-#Comments
-#   groupinstall "Development Tools" is necessary for xdebug
+FROM amazonlinux:2
 
-# update amazon software repo
-RUN yum -y update && yum -y install shadow-utils yum-utils\
-    && yum-config-manager --enable remi-php56 && yum -y update
+COPY systemctl.py /tmp/systemctl.py
+COPY server-config.sh /tmp/server-config.sh
+COPY start-servers.sh /usr/sbin/start-servers
+
+RUN yum -y update && yum -y install shadow-utils yum-utils make gcc openssl-devel httpd \
+    && yum-config-manager
+
+RUN yum install -y amazon-linux-extras
+RUN amazon-linux-extras enable php7.3
 
 #configure time zone
 RUN ln -f -s /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime
@@ -13,42 +17,14 @@ RUN ln -f -s /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime
 RUN yum -y install vim wget git && yum -y groupinstall "Development Tools"
 
 #Install apache
-RUN yum install -y httpd24 httpd24-tools mod24_ssl
-#Auto start service
-RUN chkconfig httpd on
-RUN service httpd start
+RUN yum install -y httpd
+RUN yum install -y php php-{devel,cli,mcrypt,pdo,redis,soap,xmlrpc,pear,cgi,common,curl,mbstring,gd,mysqlnd,gettext,bcmath,json,xml,fpm,intl,zip}
 
-#Install php
-RUN yum install -y php56 php56-devel php56-cli php56-common php56-gd php56-intl php56-jsonc php-pear\
-    php56-mbstring php56-mcrypt php56-mysqlnd php56-pdo php56-pecl-redis php56-soap php56-xml php56-xmlrpc
+RUN mv /tmp/systemctl.py /usr/bin/systemctl && chmod 755 /usr/bin/systemctl
+RUN /bin/bash /tmp/server-config.sh && rm /tmp/server-config.sh
 
-#Configurações adicionais do php
-RUN echo 'include_path = ".:/usr/local/etc/php/"' >> /etc/php.ini
+EXPOSE 80
 
-#Install XDebug
-RUN pecl install xdebug-2.5.5
+CMD /usr/bin/env bash start-servers;sleep infinity
 
-#Configuration XDebug
-RUN echo 'zend_extension=/usr/lib64/php/5.6/modules/xdebug.so' >> /etc/php.ini
-
-# Install Composer
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-# Quality tools
-RUN USERNAME=$('whoami') && composer global require squizlabs/php_codesniffer=*  phpcompatibility/php-compatibility=* \
-       friendsofphp/php-cs-fixer=* phpmd/phpmd=* \
-    && export PATH=/$USERNAME/.composer/vendor/bin:$PATH \
-    && phpcs --config-set installed_paths /$USERNAME/.composer/vendor/phpcompatibility/php-compatibility/ \
-    && phpcs -i
-
-#Blackfire.io
-RUN mkdir "/conf.d" && version=$(php -r "echo PHP_MAJOR_VERSION.PHP_MINOR_VERSION;") \
-    && curl -A "Docker" -o /tmp/blackfire-probe.tar.gz -D - -L -s https://blackfire.io/api/v1/releases/probe/php/linux/amd64/$version \
-    && mkdir -p /tmp/blackfire \
-    && tar zxpf /tmp/blackfire-probe.tar.gz -C /tmp/blackfire \
-    && mv /tmp/blackfire/blackfire-*.so $(php -r "echo ini_get ('extension_dir');")/blackfire.so \
-    && printf "extension=blackfire.so\nblackfire.agent_socket=tcp://blackfire:8707\n" > /etc/php/7.3/fpm/conf.d/blackfire.ini
-
-EXPOSE  80
-
-ENTRYPOINT ["/usr/sbin/httpd","-D","FOREGROUND"]
+#ENTRYPOINT ["/usr/sbin/httpd","-D","FOREGROUND"]

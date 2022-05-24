@@ -5,7 +5,7 @@ This is the Git repository of the Docker image for Amazon Linux, Apache with PHP
 ## Running
 To run the container:
 ```
-$ sudo docker run -d jerfeson/aap:php56
+$ sudo docker run -d jerfeson/aap:php74
 ```
 
 Default web root:
